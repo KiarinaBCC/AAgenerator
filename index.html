@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>AA生成器</title>
+  <style>
+    :root {
+      --scale: 1;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Courier New', monospace;
+      background: linear-gradient(to bottom, #eef2f3, #dce1e5);
+      margin: 0;
+      padding: 2em;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      transform: scale(var(--scale));
+      transform-origin: top left;
+    }
+    .container {
+      background: #fff;
+      padding: calc(2em * var(--scale));
+      border-radius: calc(12px * var(--scale));
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+      max-width: calc(800px * var(--scale));
+      width: 100%;
+    }
+    h1 {
+      margin-top: 0;
+      color: #333;
+      text-align: center;
+      font-size: calc(1.5em * var(--scale));
+    }
+    label {
+      display: block;
+      margin-top: calc(1em * var(--scale));
+      font-weight: bold;
+      color: #444;
+      font-size: calc(1em * var(--scale));
+    }
+    input[type="file"],
+    input[type="text"],
+    input[type="number"],
+    select {
+      width: 100%;
+      padding: calc(0.5em * var(--scale));
+      margin-top: calc(0.3em * var(--scale));
+      border: 1px solid #ccc;
+      border-radius: calc(6px * var(--scale));
+      font-size: calc(1em * var(--scale));
+    }
+    button {
+      margin: calc(1em * var(--scale)) calc(0.5em * var(--scale)) 0 0;
+      padding: calc(0.6em * var(--scale)) calc(1.2em * var(--scale));
+      font-size: calc(1em * var(--scale));
+      border: none;
+      border-radius: calc(6px * var(--scale));
+      background-color: #4a90e2;
+      color: white;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background-color: #357ac7;
+    }
+    pre {
+      background: #f9f9f9;
+      color: #111;
+      padding: calc(1em * var(--scale));
+      border-radius: calc(8px * var(--scale));
+      margin-top: calc(2em * var(--scale));
+      white-space: pre;
+      overflow-x: auto;
+      font-size: calc(12px * var(--scale));
+      font-family: monospace;
+      line-height: 1;
+      display: inline-block;
+    }
+    #colorOutput span {
+      font-family: monospace;
+    }
+    #colorOutput {
+      background: #fff;
+      color: #000;
+    }
+    canvas {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>AA生成器</h1>
+
+    <label>画像を選択:</label>
+    <input type="file" id="imgInput" accept="image/*">
+
+    <label>使用文字列（暗→明）:</label>
+    <input type="text" id="charSet" value="@#%*=+-. ">
+
+    <label>出力幅（最大）:</label>
+    <input type="number" id="baseWidth" value="100" min="10" max="500" onchange="applyScale()">
+
+    <label>画質（1〜10）:</label>
+    <select id="quality"></select>
+
+    <div style="margin-top: 1em;">
+      <button onclick="generateAA()">変換</button>
+      <button onclick="toggleInvert()">白黒反転</button>
+      <button onclick="toggleColor()">カラー表示切替</button>
+    </div>
+
+    <pre id="output">(ここにAAが表示されます)</pre>
+    <pre id="colorOutput" style="display:none;"></pre>
+
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <script>
+    const qualitySelect = document.getElementById("quality");
+    for (let i = 1; i <= 10; i++) {
+      const opt = document.createElement("option");
+      opt.value = i;
+      opt.textContent = i;
+      qualitySelect.appendChild(opt);
+    }
+    qualitySelect.value = "5";
+
+    let isInverted = false;
+    let useColor = false;
+
+    function applyScale() {
+      const baseWidth = parseInt(document.getElementById("baseWidth").value);
+      const scale = Math.max(0.3, baseWidth / 100);
+      document.documentElement.style.setProperty('--scale', scale);
+    }
+    applyScale();
+
+    function toggleInvert() {
+      isInverted = !isInverted;
+      generateAA();
+    }
+
+    function toggleColor() {
+      useColor = !useColor;
+      document.getElementById("output").style.display = useColor ? "none" : "inline-block";
+      document.getElementById("colorOutput").style.display = useColor ? "inline-block" : "none";
+      generateAA();
+    }
+
+    function generateAA() {
+      const file = document.getElementById('imgInput').files[0];
+      const charSetInput = document.getElementById('charSet').value;
+      const baseWidth = parseInt(document.getElementById('baseWidth').value);
+      const qualityLevel = parseInt(document.getElementById('quality').value);
+      if (!file || !charSetInput) return alert("画像と文字列を入力してください");
+
+      const charSet = isInverted ? [...charSetInput].reverse().join('') : charSetInput;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          const canvas = document.getElementById("canvas");
+          const ctx = canvas.getContext("2d");
+
+          const scaleFactor = qualityLevel / 5;
+          const scaledWidth = Math.floor(baseWidth * scaleFactor);
+          const scale = scaledWidth / img.width;
+          const scaledHeight = Math.floor(img.height * scale * 0.5);
+
+          canvas.width = scaledWidth;
+          canvas.height = scaledHeight;
+          ctx.drawImage(img, 0, 0, scaledWidth, scaledHeight);
+
+          const imgData = ctx.getImageData(0, 0, scaledWidth, scaledHeight).data;
+
+          let aa = "";
+          let colorAA = "";
+
+          for (let y = 0; y < scaledHeight; y++) {
+            let line = "";
+            let colorLine = "";
+            for (let x = 0; x < scaledWidth; x++) {
+              const i = (y * scaledWidth + x) * 4;
+              const r = imgData[i], g = imgData[i + 1], b = imgData[i + 2];
+              const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+              const index = Math.floor((brightness / 255) * (charSet.length - 1));
+              const char = charSet[charSet.length - 1 - index];
+              line += char;
+              colorLine += `<span style="color: rgb(${r},${g},${b})">${char}</span>`;
+            }
+            aa += line + "\n";
+            colorAA += colorLine + "<br>";
+          }
+
+          document.getElementById("output").textContent = aa;
+          document.getElementById("colorOutput").innerHTML = colorAA;
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+  </script>
+<p>created by BCC</p>
+</body>
+</html>
